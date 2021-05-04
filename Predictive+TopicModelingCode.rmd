@@ -1,12 +1,3 @@
----
-Course & Title: "APAN 5205 Predictive Analysis and Topic Modeling"
-Group: "Purrfect"
-Members: "Drashti Shah, Cenrara Widi, Jaejae Zhang"
----
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
 
 ## Read Data
 
