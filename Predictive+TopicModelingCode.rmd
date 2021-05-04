@@ -1,0 +1,280 @@
+---
+Course & Title: "APAN 5205 Predictive Analysis and Topic Modeling"
+Group: "Purrfect"
+Members: "Drashti Shah, Cenrara Widi, Jaejae Zhang"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Read Data
+
+```{r read data, echo=TRUE}
+data = read.csv("/Users/csw2145/Documents/Clean_Simple_Data.csv")
+```
+
+## Prepare Data
+
+Create corpus
+
+```{r create corpus, warning=FALSE, include=FALSE}
+library(tm); library(dplyr)
+
+corpus = Corpus(VectorSource(data$reviewText))
+```
+
+Clean review text for each corpus
+
+```{r clean text, message=FALSE, warning=FALSE, include=FALSE}
+corpus <- corpus %>%
+  tm_map(FUN = content_transformer(tolower)) %>%
+  tm_map(content_transformer(FUN = function(x)gsub(pattern = 'http[[:alnum:][:punct:]]*', replacement = ' ', x = x))) %>%
+  tm_map(FUN = removePunctuation) %>%
+  tm_map(FUN = removeWords, c(stopwords('english'))) %>%
+  tm_map(FUN = stripWhitespace) 
+```
+
+Create dictionary
+
+```{r create dict, echo=TRUE}
+dict = findFreqTerms(DocumentTermMatrix(Corpus(VectorSource(data$reviewText))),
+                     lowfreq = 0)
+dict_corpus = Corpus(VectorSource(dict))
+```
+
+Stem document
+
+```{r stem document, warning=FALSE, include=FALSE}
+corpus = tm_map(corpus, FUN = stemDocument)
+```
+
+#### Term Frequency
+
+```{r dtm tf, echo=TRUE}
+#Create a document term matrix (tokenize)
+dtm = DocumentTermMatrix(corpus)
+
+#Inspect corpus 10000
+inspect(dtm[10000,])
+
+#Remove sparse term (only keeping terms that appear in at least 5% of documents).
+xdtm = removeSparseTerms(dtm,sparse = 0.95)
+xdtm = as.data.frame(as.matrix(xdtm))
+
+#Using the dictionary created earlier, we are going to complete the stems to make the terms more meaningful
+colnames(xdtm) = stemCompletion(x = colnames(xdtm),
+                                dictionary = dict_corpus,
+                                type = 'prevalent')
+colnames(xdtm) = make.names(colnames(xdtm))
+
+#Browse tokens
+sort(colSums(xdtm), decreasing = T)
+```
+
+#### Term Frequency - Inverse Document Frequency Weighting
+
+We are going to consider another document term matrix, this time using Term Frequency - Inverse Document Frequency Weighting.
+
+```{r dtm tf-idf, echo=TRUE, warning=FALSE}
+dtm_tfidf = DocumentTermMatrix(x = corpus,
+                               control = list(weighting = function(x) weightTfIdf(x, normalize = F)))
+xdtm_tfidf = removeSparseTerms(dtm_tfidf, sparse = 0.95)
+xdtm_tfidf = as.data.frame(as.matrix(xdtm_tfidf))
+colnames(xdtm_tfidf) = stemCompletion(x = colnames(xdtm_tfidf),
+                                      dictionary = dict_corpus,
+                                      type = 'prevalent')
+colnames(xdtm_tfidf) = make.names(colnames(xdtm_tfidf))
+sort(colSums(xdtm_tfidf), decreasing = T)
+```
+
+Comparing Document Term Matrix: Term Frequency vs. Term Frequency Inverse Document Frequency
+
+```{r comparison tf and tf-idf, eval=FALSE, include=FALSE}
+xdtm[100000:100010,10:20]
+xdtm_tfidf[100000:100010,10:20]
+```
+```{r comparison tf and tf-idf plot, eval=FALSE, include=FALSE}
+# Visualize the difference in weights for top 20 terms
+library(tidyr); library(ggplot2); library(ggthemes)
+data.frame(Term = colnames(xdtm), TF = colMeans(xdtm), TFIDF = colMeans(xdtm_tfidf))%>%
+  arrange(desc(TF))%>%
+  top_n(10)%>%
+  gather(key = Weighting_Method, value = Weight, 2:3)%>%
+  ggplot(aes(x = Term, y = Weight, fill = Weighting_Method)) +
+  geom_col(position = 'dodge')+
+  coord_flip() +
+  theme_calc()
+```
+
+Now, we want to add the reviewScore and category column to the terms dataframe. We are using tf-idf.
+
+```{r combine datasets, echo=TRUE}
+data_final_tfidf = cbind(reviewScore = data$reviewScore, xdtm_tfidf)
+```
+
+## Predictive Analysis
+
+For the whole data - without splitting categories
+
+```{r pred split data, echo=TRUE}
+#Split data
+set.seed(617)
+split = sample(1:nrow(data_final_tfidf), size = 0.7*nrow(data_final_tfidf))
+train = data_final_tfidf[split,]
+test = data_final_tfidf[-split,]
+```
+```{r pred cart, echo=TRUE}
+#CART
+library(rpart); library(rpart.plot)
+tree = rpart(reviewScore~., train)
+rpart.plot(tree)
+```
+```{r rmse cart, echo=TRUE}
+#RMSE for CART
+pred_tree = predict(tree, newdata = test)
+rmse_tree = sqrt(mean((pred_tree - test$reviewScore)^2))
+rmse_tree
+```
+```{r pred regression, echo=TRUE}
+#Regression
+library(knitr); library(broom)
+
+reg = lm(reviewScore~., train)
+reg %>%
+  tidy() %>%
+  mutate(p.value = scales::pvalue(p.value)) %>%
+  kable(
+    caption = "Regression Model to Predict Review Score Based on Terms",
+    col.names = c("Predictor", "Estimate", "Std. Error", "t", "p"),
+    digits = c(0, 2, 3, 2, 3)
+  )
+```
+```{r rmse regression, echo=TRUE}
+#RMSE for regression
+pred_reg = predict(reg, newdata = test)
+rmse_reg = sqrt(mean((pred_reg - test$reviewScore)^2))
+rmse_reg
+```
+
+## Topic Modeling
+
+```{r topic model 2 topics, echo=TRUE}
+library(magrittr); library(topicmodels)
+
+#Remove documents with all zeros
+xdtm_topic = xdtm[which(rowSums(xdtm)!=0),]
+
+set.seed(617)
+topic2 = LDA(x = xdtm_topic, k = 2)
+```
+
+#### Term-Topic Probabilities
+
+```{r explore term-topic prob, echo=TRUE}
+terms(topic2, 10)
+```
+```{r unique length, echo=TRUE}
+length(unique(topic2@terms))
+```
+```{r length, echo=TRUE}
+length(topic2@terms)
+```
+
+#### Term-Topic Probabilities with Beta
+
+```{r term-topic prob with beta, echo=TRUE}
+#exp(topic2@beta) is term topic probabilities
+#topic2@terms is list of all terms
+df_beta = data.frame(t(exp(topic2@beta)), row.names = topic2@terms)
+colnames(df_beta) = c('topic1', 'topic2')
+df_beta #term-topic probabilities
+```
+
+#### Document-Topic Probabilities
+
+```{r doc-term prob, echo=TRUE}
+library(kableExtra)
+
+df_gamma = cbind(as.integer(topic2@documents), topic2@gamma)
+colnames(df_gamma) = c('id','topic1','topic2')
+df_gamma[1:10,] %>%  #document probabilities for first 10 documents
+  kable() %>%
+  kable_styling()
+```
+
+#### Combine Document-Topics with Original Data
+
+```{r combine topic and data, echo=TRUE}
+text_topics = cbind(as.integer(topic2@documents),topic2@gamma)
+colnames(text_topics) = c('id', 'topic1', 'topic2')
+text_topics = merge(x = text_topics, y = data[, c(9,1)], by = c('id', 'id'))
+head(text_topics)
+```
+
+#### LDA Predictive Model
+
+```{r split topic data, echo=TRUE}
+set.seed(617)
+split = sample(1:nrow(text_topics), size = 0.7*nrow(text_topics))
+train_topic = text_topics[split,]
+test_topic = text_topics[-split,]
+```
+```{r model and rmse, echo=TRUE}
+model_topic = rpart(reviewScore~.-id, train_topic)
+pred_topic = predict(model_topic, newdata = test_topic)
+rmse_topic = sqrt(mean((pred_topic - test_topic$reviewScore)^2))
+rmse_topic
+```
+
+#### Visualization
+
+```{r visualize term-topic prob, eval=FALSE, include=FALSE}
+library(tidytext); library(reshape2): library(tidyr); library(ggplot2); library(ggthemes)
+topic2 %>%
+  tidy(matrix='beta')%>%
+  group_by(topic)%>%
+  top_n(n = 10,wt=beta)%>%
+  ungroup()%>%
+  ggplot(aes(x=reorder(term,beta),y=beta,fill=factor(topic)))+
+  geom_bar(position='dodge', stat='identity')+
+  facet_wrap(~topic, scales = 'free')+
+  coord_flip()+guides(fill=F)+xlab('')+theme_economist()
+```
+```{r visualize doc-topic prob, eval=FALSE, include=FALSE}
+topic2%>%
+  tidy('gamma')%>%
+  filter(as.integer(document)<=20)%>%
+  ggplot(aes(x=reorder(document,as.numeric(document)),y=gamma,fill=factor(topic)))+
+  geom_bar(position='fill',stat='identity')+xlab('id')+guides(fill=F)+coord_flip()+theme_economist()
+```
+
+## LSA
+
+```{r lsa, echo=TRUE}
+library(lsa)
+
+clusters = lsa(xdtm_tfidf)
+
+#LSA decomposes data into three matrices. The term matrix contains the dimensions from svd
+clusters$tk = as.data.frame(clusters$tk)
+colnames(clusters$tk) = paste0("dim", 1:9)
+head(clusters$tk)
+```
+
+### LSA Predictive Model
+
+```{r echo=TRUE}
+clusters_data = cbind(id = data$id, reviewScore = data$reviewScore, clusters$tk)
+
+set.seed(617)
+split = sample(1:nrow(clusters_data), size = 0.7*nrow(clusters_data))
+train_lsa = clusters_data[split,]
+test_lsa = clusters_data[-split,]
+
+model_lsa = rpart(reviewScore~.-id, train_lsa)
+pred_lsa = predict(model_lsa, newdata = test_lsa)
+rmse_lsa = sqrt(mean((pred_lsa - test_lsa$reviewScore)^2))
+rmse_lsa
+```
+
