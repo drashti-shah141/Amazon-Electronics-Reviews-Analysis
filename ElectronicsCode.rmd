@@ -1,0 +1,203 @@
+---
+Course: APAN 5205 Electronics Data Set cleaning
+Title: Data Preparation for the main Electronics dataset
+Group: Purrfect
+Members: Drashti Shah, Cenrara Widi, Jaejae Zhang
+output: html_document
+---
+##STEP 1 Data Import
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+#Setting up the libraries
+```{r library, include=FALSE}
+
+library(jsonlite);library(dplyr);library(tidyr);library(ggplot2);library(lubridate);library(mice);library(stringr);library(tinytex);library(markdown)
+```
+
+#Setting the working directory and increasing the RAM allocation
+
+```{r memory, echo=FALSE}
+setwd("C:/Users/patel/Documents/Drashti Columbia Assignments")
+memory.limit()
+memory.limit(size=75000000)
+
+```
+
+
+#Importing the raw json dataset into a data frame
+```{r import, echo=FALSE}
+
+#Loading 20 million rows
+electronicsdata=stream_in(file("Electronics.json"))
+head(electronicsdata)
+```
+
+##STEP 2- Data Cleaning
+```{r distinct rows, echo=FALSE}
+#Removing the duplicate rows by combination of reviewerID and asin
+
+electronicsdata=electronicsdata%>%
+  distinct(asin,reviewerID,.keep_all = TRUE)
+dim(electronicsdata)
+
+#This reduced over 400,000 rows
+ 
+```
+
+
+```{r glimpse style, echo=FALSE}
+#Now checking the data in column -style
+
+glimpse(electronicsdata$style)
+
+#Since, out of all 44 columns in that data frame, only format has values, we will drop all other columns within that data frame
+
+```
+
+
+```{r unpack and filter, echo=FALSE}
+#Unpacking style data frame first
+
+
+electronicsdata=electronicsdata%>%
+  unpack(style)
+
+names(electronicsdata)
+
+#Checking all unique formats to see which ones to eliminate
+unique(electronicsdata$`Format:`)
+
+#Examining a few ambiguous formats
+electronicsdata%>%
+  filter(`Format:`==" Misc.")#Eliminating these as they are mostly book lights
+
+electronicsdata%>%
+  filter(`Format:`==" Misc. Supplies") #Eliminating these as well
+
+
+#Eliminating all non-electronic formats
+
+irrelevant_formats=c(" Hardcover"," Paperback"," Kindle Edition"," Library Binding"," Spiral-bound"," Mass Market Paperback",
+                                               " Audible Audiobook"," Misc."," Misc. Supplies",
+                          " Hardcover-spiral"," Plastic Comb"," Staple Bound"," Pamphlet"," Amazon Video" ," Tools & Home Improvement",
+                          " Toy"," Baby Product"," Apparel" ," Unknown Binding"," Kitchen"," Health and Beauty"," Diary"," Map",
+                          " Single Issue Magazine"," Comic"," Cards"," Grocery"," Calendar"," Box"," Loose Leaf"," Leather Bound"," Sports"," Perfect Paperback"," Vinyl Bound",
+                     " Game"," Blu-ray"," Video Game"," CD-ROM"," DVD-ROM"," VHS Tape"," UMD for PSP"," Audio Cassette"," MP3 Music"," Software Download"," Software",
+                     " Office Product"," Vinyl"," DVD"," Audio CD")
+data=electronicsdata%>%
+  filter(!`Format:` %in% irrelevant_formats)
+
+
+#Checking unique formats in format column now-kept only electronics related formats
+unique(data$`Format:`)
+
+#There is NA in format but we will deal with it later when we join this dataset with metadata
+data[is.na(data$`Format:`),]
+
+```
+
+
+
+```{r drop, echo=FALSE}
+#Dropping irrelevant columns
+names(data)
+data=subset(data, select = -c(6:50,52,55))
+
+```
+
+
+```{r date formats, echo=FALSE}
+#Changing unix review time to yyyy-mm-dd format
+
+data$unixReviewTime=as.Date(as.POSIXct(data$unixReviewTime,origin="1970-01-01"))
+
+#Eliminating reviewTime column
+data=subset(data,select=-c(reviewTime))
+names(data)
+```
+
+
+```{r recent data, echo=TRUE}
+#Keeping only 2016-2018 data as Amazon changed its terms and conditions in October, 2016 
+data=data %>%
+ filter(unixReviewTime >= "2016-01-01")
+#This narrows down the dataset to 9 million rows
+dim(data)
+```
+
+
+```{r missing imputation, echo=FALSE}
+# Handling NA's and Null's
+
+# check NA's
+sum(is.na(data$verified)) #Has 0 NA
+sum(is.na(data$reviewText)) #Has 6876 NA's
+sum(is.na(data$reviewerID))#Has 0 NA
+sum(is.na(data$asin))#Has 0 NA
+sum(is.na(data$vote))#Has over 8 million NA's
+sum(is.na(data$overall))#Has 0 NA
+sum(is.na(data$unixReviewTime))#Has 0 NA
+
+dim(data)
+
+#Dropping the rows where reviewText is NA
+data=subset(data, !is.na(reviewText))
+
+#Dropping vote column as more than 80% of the data is missing
+data=subset(data,select=-c(vote))
+
+
+```
+
+```{r rename, echo=FALSE}
+#Renaming a few columns
+data=data %>% 
+  rename(
+    reviewTime= unixReviewTime,
+    reviewScore=overall
+    )
+
+```
+
+##STEP 3- Cleaning reviewText of punctuations, tabs, blank spaces, special characters, and non-graphical characters.
+```{r clean review text, echo=FALSE}
+data = data %>%
+  mutate(reviewText = gsub("[[:punct:]]", "", reviewText), #Remove punctuation
+         reviewText = gsub("[ |\t]{2,}", "", reviewText), #Remove tab
+         reviewText = gsub("^ ", "", reviewText), #Remove blank space in the beginning
+         reviewText = gsub(" $", "", reviewText), #Remove blank space at the end
+         reviewText = gsub("[^[:graph:]]", " ", reviewText), #Remove non-graphical characters
+         reviewText = gsub("[^[:alnum:]]", " ", reviewText), #Remove special characters
+         reviewText = gsub("[^a-zA-Z0-9]", " ", reviewText)) #Remove other special characters
+
+data$reviewText[1:20]
+
+```
+
+
+##STEP 4- Writing new csv
+```{r csv, echo=FALSE}
+#Glimpse of clean data
+glimpse(data)
+
+write.csv(data, "Clean_ElectronicsData.csv",row.names = F)
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
