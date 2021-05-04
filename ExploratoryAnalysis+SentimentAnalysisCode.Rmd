@@ -1,0 +1,386 @@
+---
+Course & Title: "APAN 5205 Data Exploration and Sentiment Analysis"
+Group: "Purrfect"
+Members: "Drashti Shah, Cenrara Widi, Jaejae Zhang"
+
+---
+
+# This file contains data exploration and sentiment analysis code on the new cleaned combined dataset
+
+##STEP 1: Initial setup
+
+```{r setup, include=FALSE}
+rm(list=ls())
+
+library(ggplot2); library(caret); library(tidyr); library(dplyr);library(tidytext)
+library(leaps); library(car); library(mice); library(car); library(zoo)
+library(data.table); library(stringr); library(corrplot);library(magrittr);library(tm);library(tidytext);library(ngram)
+
+```
+
+## STEP 2: Data Import
+
+```{r data import}
+data=read.csv("Clean_Simple_Data.csv",stringsAsFactors = F)
+names(data)
+memory.limit(7500000000000)
+
+```
+
+##STEP 3: Exploratory Analysis of Review Scores and Review Text
+
+```{r distribution of review scores}
+# Part 1- Checking the distribution of reviews
+ggplot(data=data,aes(x=reviewScore))+
+geom_histogram(fill='orange')+
+theme_bw()+
+scale_x_reverse()+
+xlab("Review Score")+ylab("Count of reviews")+coord_flip() +
+ggtitle("Distribution of review ratings")+theme(plot.title=element_text(hjust=0.5))
+
+
+#Highly skewed towards 5 score
+```
+
+
+```{r}
+#Part 2- Review score by Verified Users
+ggplot(data,aes(x=reviewScore,fill=factor(verified)))+
+         geom_bar(position="fill")+labs(x="Review Score",y="Review Count",fill="Verified Purchases")+
+         ggtitle("Distribution of reviews from 2016-2018")+
+        scale_fill_manual(values=c("#A0A0A0","#FFB266"))+theme_bw()+
+        theme(plot.title=element_text(hjust=0.5))
+
+#This shows around 90% reviews in all different score levels are verified
+```
+
+
+```{r most reviewed main categories and products}
+#Part 3- Review score by main category and products-title
+ggplot(data,aes(x=factor(main_cat),fill=factor(reviewScore)))+
+         geom_bar(position="fill")+coord_flip()
+
+#All categories have mostly 5-score ratings
+      
+#Lets take a look at most reviewed main_categories now
+
+data%>%
+  select(main_cat)%>%
+  group_by(main_cat)%>%
+  count(main_cat)%>%
+  arrange(desc(n))%>%
+  head(10)
+
+#Top three most reviewed main category are Computers, All Electronics, Home Audio and Theater
+
+#Most reviewed products
+data%>%
+  group_by(title,reviewScore)%>%
+  count(title)%>%
+  arrange(desc(n))%>%
+  head(20)
+
+
+#Most reviewed 25 products have all 5 star reviews   
+
+```
+
+
+```{r review trend}
+#Part 4 Trend of review scores by review time
+
+data$reviewTime=as.Date(data$reviewTime)
+
+
+data=data%>%
+  mutate("Month_Year"=as.yearmon(reviewTime,format="%Y/%m"))
+
+
+
+data%>%
+  group_by(Month_Year,reviewScore)%>%
+  count()%>%
+  ggplot(aes(x=Month_Year,y=n,color=factor(reviewScore)))+
+  geom_point(size=4,alpha=0.4)+
+  scale_color_manual(values=c("#FF1493","#D16103","#4E84C4","#52854C","#9400D3"))+
+  labs(x="Review Time Span",y="Count of reviews",color="Review Ratings")+ggtitle("Review Trend from 2016-2018")+
+  theme_bw()+theme(plot.title=element_text(hjust=0.5))
+
+
+```
+
+
+```{r characters and words in review text}
+# Part 5: reviewText -Character and Words counts for all Reviews
+
+
+# Characters
+mean_characters = mean(nchar(data$reviewText))
+median_characters = median(nchar(data$reviewText))
+
+
+# Words
+mean_words = mean(str_count(string = data$reviewText,pattern = '\\S+'))
+median_words = median(str_count(string = data$reviewText,pattern = '\\S+'))
+
+counts = data.frame(Variables = c("Characters", "Words"),
+                    Mean = round(c(mean_characters, mean_words),2),
+                    Median = round(c(median_characters, median_words),2))
+
+counts
+
+#Weak negative correlation of -0.10 suggests that review length does not impact review ratings
+```
+
+
+
+```{r correlation}
+# Part 6 Review.Text length and Ratings  -  correlation
+# Characters
+cor(nchar(data$reviewText),data$reviewScore)
+cor.test(nchar(data$reviewText),data$reviewScore)
+
+  # Words
+cor(str_count(string = data$reviewText,pattern = '\\S+'),data$reviewScore)
+cor.test(str_count(string = data$reviewText,pattern = '\\S+'),data$reviewScore)
+
+
+#Negative weak correlation between length of the review and review score
+# This could be because few longer reviews have more criticisms
+
+```
+
+
+```{r common words}
+#Part 7- Most common words in review
+
+library(qdap) 
+Frequent_terms=freq_terms(text.var = data$reviewText,top = 25) 
+plot(Frequent_terms)
+
+Frequent_appropriate_terms=freq_terms(text.var=data$reviewText,top=25,stopwords = Top200Words)
+plot(Frequent_appropriate_terms)
+```
+```{r}
+#Part 8- Top reviewers who gave more than 10 reviews in the period of 3 years
+
+top_reviewers=data %>%
+  group_by(reviewerID)%>%
+  count(reviewerID)%>%
+  filter(n>=10)%>%
+  arrange(desc(n))
+
+top_reviewers%>%head(10)
+
+
+#Distribution of review count per user
+top_reviewers%>%
+  ggplot(aes(x=n))+
+  geom_histogram(binwidth=5)+ylab("Review Count for top reviewers")+ggtitle("Distribution of review count per user")+
+  theme_bw()+theme(plot.title=element_text(hjust=0.5))
+
+
+```
+
+
+```{r}
+#Part 8- Trend of review length from 2016-2018
+
+data%>%
+  group_by(Month_Year)%>%
+  mutate(median_words = round(median(str_count(data$reviewText,pattern = '\\S+')),0))%>%
+  ggplot(aes(x=Month_Year,y=median_words))+
+  geom_point(size=4)+
+  labs(x="Review Time Span",y="Median review length")+ggtitle("Review length trend from 2016-2018")+
+  theme_bw()+theme(plot.title=element_text(hjust=0.5))
+
+#No special trend in review length is observed from 2016-2018 time periods
+
+```
+
+
+##STEP 4 Sentiment Analysis on text colum 'reviewText' and formation of Wordclouds
+
+```{r}
+# Part 1: Binary Sentiment (positive/negative) - Bing Lexicon
+data %>% 
+  select(id,reviewText)%>% 
+  group_by(id)%>% 
+  unnest_tokens(output=word,input=reviewText)%>% 
+  ungroup()%>% 
+  inner_join(get_sentiments('bing'))%>%
+  group_by(sentiment)%>% 
+  summarize(n = n())%>% 
+  mutate(proportion = n/sum(n))
+
+#Visualization
+
+data %>% 
+  group_by(id,reviewScore)%>% 
+  unnest_tokens(output=word,input=reviewText)%>% 
+  ungroup()%>% 
+  inner_join(get_sentiments('bing'))%>%
+  group_by(reviewScore,sentiment)%>% 
+  summarize(n = n())%>% 
+  mutate(proportion = n/sum(n))%>%
+  ggplot(aes(x=reviewScore,y=proportion,fill=sentiment))+geom_col()+coord_flip()+
+  labs(x="Review Ratings",y="Proportion",fill="Sentiments")+ggtitle("Proportion of Positive vs Negative Sentiments in review scores")+
+  theme_bw()+theme(plot.title=element_text(hjust=0.5))
+
+
+#Correlation between positive sentiments and review ratings
+data%>% 
+  group_by(id,reviewScore)%>% 
+  unnest_tokens(output = word, input = reviewText)%>% 
+  inner_join(get_sentiments('bing'))%>% 
+  group_by(id,reviewScore)%>%
+  summarize(positivity = sum(sentiment=='positive')/n())%>% 
+  ungroup()%>% 
+  summarize(correlation = cor(positivity,reviewScore))
+
+##- Approximately 75% words are positive in the entire review set which justifies higher review ratings
+##- The correlation is around 52%, which indicates that 50% of reviews with positive words directly imply a good Rating.
+
+```
+
+```{r}
+# Part 2: Emotion Lexicon - NRC Emotion Lexicon
+#install.packages("textdata")
+nrc = get_sentiments('nrc')
+
+nrc = read.table(file = 'https://raw.githubusercontent.com/pseudorational/data/master/nrc_lexicon.txt',
+                 header = F,
+                 col.names = c('word','sentiment','num'),
+                 sep = '\t',
+                 stringsAsFactors = F)
+nrc = nrc[nrc$num!=0,]
+nrc$num = NULL
+
+# Plot of emotions
+data%>% 
+  group_by(id)%>% 
+  unnest_tokens(output = word, input = reviewText)%>% 
+  inner_join(nrc)%>% 
+  group_by(sentiment)%>% 
+  summarize(n = n())%>% 
+  mutate(proportion = n/sum(n))%>%
+  ggplot(aes(x=reorder(sentiment,X=proportion),y=proportion,fill=sentiment))+geom_col()+
+  guides(fill=F)+coord_flip()+
+  xlab("sentiments")+ylab("Percentage of Sentiments")+
+  theme_bw()+theme_bw()+theme(plot.title=element_text(hjust=0.5))
+
+
+# Ratings of all Reviews based on Emotion Expressed
+data%>% 
+  group_by(id,reviewScore)%>% 
+  unnest_tokens(output = word, input = reviewText)%>% 
+  inner_join(nrc)%>% 
+  group_by(id,sentiment,reviewScore)%>% 
+  count()%>%
+  group_by(sentiment, reviewScore)%>% 
+  summarize(n = mean(n))%>% 
+  ungroup()%>% 
+  ggplot(aes(x=reviewScore,y=n,fill=reviewScore))+ geom_col()+
+  facet_wrap(~sentiment)+ guides(fill=F)+coord_flip()+
+  theme_bw()
+
+
+
+# Correlation between emotion expressed and review rating 
+data%>% 
+  group_by(id,reviewScore)%>% 
+  unnest_tokens(output = word, input = reviewText)%>% 
+  inner_join(nrc)%>% 
+  group_by(id,sentiment,reviewScore)%>% 
+  count()%>%
+  ungroup()%>% 
+  group_by(sentiment)%>% 
+  summarize(correlation = cor(n,reviewScore))
+
+
+
+# Scatterplot of relationship
+data%>% 
+  group_by(id,reviewScore)%>% 
+  unnest_tokens(output = word, input = reviewText)%>% 
+  inner_join(nrc)%>% 
+  group_by(id,sentiment,reviewScore)%>% 
+  count()%>%
+  ungroup()%>% 
+  group_by(sentiment)%>% 
+  ggplot(aes(x=reviewScore,y=n))+geom_point()+
+  facet_wrap(~sentiment)+
+  theme_bw()
+
+##- Words expressing positive emotions in overall review set are highest followed by words expressing trust, anticipation and negative
+## - The correlation between frequency of emotions expressed and ratings is very low. 
+
+```
+
+
+```{r}
+#Part 4: Sentiment score Lexicons - Afinn Lexicon
+
+
+afinn = get_sentiments('afinn')
+afinn = read.table('https://raw.githubusercontent.com/pseudorational/data/master/AFINN-111.txt',
+                   header = F,
+                   quote="",
+                   sep = '\t',
+                   col.names = c('word','value'), 
+                   encoding='UTF-8',
+                   stringsAsFactors = F)
+
+data %>% 
+  group_by(id)%>% 
+  unnest_tokens(output=word,input=reviewText)%>% 
+  inner_join(afinn)%>%
+  summarize(reviewSentiment = mean(value))%>% 
+  ungroup()%>%
+  summarize(min=min(reviewSentiment),max=max(reviewSentiment),median=median(reviewSentiment),mean=mean(reviewSentiment))
+
+data %>% 
+  select(id,reviewText)%>% 
+  group_by(id)%>% 
+  unnest_tokens(output=word,input=reviewText)%>% 
+  inner_join(afinn)%>% 
+  summarize(reviewSentiment = mean(value))%>% 
+  ungroup()%>% 
+  ggplot(aes(x=reviewSentiment,fill=reviewSentiment>0))+ 
+  geom_histogram(binwidth = 0.1)+labs(x="Review Sentiment Scores")+ggtitle("Distribution of sentiments across the reviews")+
+  scale_x_continuous(breaks=seq(-5,5,1))+
+  scale_fill_manual(values=c('tomato','seagreen'))+ guides(fill=F)+
+  theme_bw()+theme(plot.title=element_text(hjust=0.5))
+
+
+##  -  The lowest sentiment score for any 'reviewText' is -5 and the highest is +5.
+##  -  The mean sentiment score is 1.60 and the median is 2
+##  -  See visualization graph, shows distribution of sentiment scores and their counts
+
+
+
+```
+
+
+```{r}
+# Part 5: Word cloud of 100 words (except stop words)
+
+
+library(wordcloud2)
+wordcloudData = 
+  data%>% 
+  group_by(id)%>% 
+  unnest_tokens(output=word,input=reviewText)%>% 
+  anti_join(stop_words)%>% 
+  group_by(word)%>%
+  summarize(freq = n())%>% 
+  arrange(desc(freq))%>% 
+  ungroup()%>% 
+  data.frame()%>%
+  arrange(desc(freq))
+
+
+
+set.seed(1411)
+wordcloud2(data=wordcloudData[1:100,],size=0.7,color="random-light")+WCtheme(1)
+```
