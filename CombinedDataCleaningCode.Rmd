@@ -1,9 +1,3 @@
----
-Course & Title: "APAN 5205 Data Cleaning"
-Group: "Purrfect"
-Members: "Drashti Shah, Cenrara Widi, Jaejae Zhang"
-
----
 # This file contains data cleaning code for two raw datasets and the combined dataset
 
 # DATASET 1: ELECTRONICS DATASET RAW
