@@ -1,10 +1,3 @@
----
-Course & Title: "APAN 5205 Data Exploration and Sentiment Analysis"
-Group: "Purrfect"
-Members: "Drashti Shah, Cenrara Widi, Jaejae Zhang"
-
----
-
 # This file contains data exploration and sentiment analysis code on the new cleaned combined dataset
 
 ##STEP 1: Initial setup
