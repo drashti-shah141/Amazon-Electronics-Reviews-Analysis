@@ -7,7 +7,7 @@ data = read.csv("/Users/csw2145/Documents/Clean_Simple_Data.csv")
 
 ## Prepare Data
 
-Create corpus
+#Create corpus
 
 ```{r create corpus, warning=FALSE, include=FALSE}
 library(tm); library(dplyr)
@@ -15,7 +15,7 @@ library(tm); library(dplyr)
 corpus = Corpus(VectorSource(data$reviewText))
 ```
 
-Clean review text for each corpus
+#Clean review text for each corpus
 
 ```{r clean text, message=FALSE, warning=FALSE, include=FALSE}
 corpus <- corpus %>%
@@ -26,7 +26,7 @@ corpus <- corpus %>%
   tm_map(FUN = stripWhitespace) 
 ```
 
-Create dictionary
+#Create dictionary
 
 ```{r create dict, echo=TRUE}
 dict = findFreqTerms(DocumentTermMatrix(Corpus(VectorSource(data$reviewText))),
@@ -34,7 +34,7 @@ dict = findFreqTerms(DocumentTermMatrix(Corpus(VectorSource(data$reviewText))),
 dict_corpus = Corpus(VectorSource(dict))
 ```
 
-Stem document
+#Stem document
 
 ```{r stem document, warning=FALSE, include=FALSE}
 corpus = tm_map(corpus, FUN = stemDocument)
@@ -65,7 +65,7 @@ sort(colSums(xdtm), decreasing = T)
 
 #### Term Frequency - Inverse Document Frequency Weighting
 
-We are going to consider another document term matrix, this time using Term Frequency - Inverse Document Frequency Weighting.
+#We are going to consider another document term matrix, this time using Term Frequency - Inverse Document Frequency Weighting.
 
 ```{r dtm tf-idf, echo=TRUE, warning=FALSE}
 dtm_tfidf = DocumentTermMatrix(x = corpus,
@@ -79,7 +79,7 @@ colnames(xdtm_tfidf) = make.names(colnames(xdtm_tfidf))
 sort(colSums(xdtm_tfidf), decreasing = T)
 ```
 
-Comparing Document Term Matrix: Term Frequency vs. Term Frequency Inverse Document Frequency
+#Comparing Document Term Matrix: Term Frequency vs. Term Frequency Inverse Document Frequency
 
 ```{r comparison tf and tf-idf, eval=FALSE, include=FALSE}
 xdtm[100000:100010,10:20]
@@ -98,7 +98,7 @@ data.frame(Term = colnames(xdtm), TF = colMeans(xdtm), TFIDF = colMeans(xdtm_tfi
   theme_calc()
 ```
 
-Now, we want to add the reviewScore and category column to the terms dataframe. We are using tf-idf.
+# Now, we want to add the reviewScore and category column to the terms dataframe. We are using tf-idf.
 
 ```{r combine datasets, echo=TRUE}
 data_final_tfidf = cbind(reviewScore = data$reviewScore, xdtm_tfidf)
