@@ -2,5 +2,7 @@
 *.md linguist-detectable=true
 *.md linguist-language=Markdown
 
+README.md linguist-detectable=false
+readme.md linguist-detectable=false
 
 
