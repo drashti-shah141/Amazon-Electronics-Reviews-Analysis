@@ -375,5 +375,6 @@ wordcloudData =
 
 
 set.seed(1411)
-wordcloud2(data=wordcloudData[1:100,],size=0.7,color="random-light")+WCtheme(1)
+wordcloud2(data=wordcloudData[1:100,],size=0.7,color="random-light")+WCtheme(1
+0
 ```
